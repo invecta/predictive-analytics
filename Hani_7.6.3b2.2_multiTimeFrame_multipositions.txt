@@ -1,0 +1,585 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © hindaouihani
+
+//@version=6
+strategy("Hani_7.6.3b2.2_multiTimeFrame_multipositions", overlay=true, calc_on_every_tick=true, pyramiding=3)
+ 
+// -------------------------------
+// Global persistent variables for tick‐count and exit alert scheduling
+// -------------------------------
+var int tickCounter = 0
+var exitAlertScheduleTicks = array.new_int()      // Stores the tick at which a scheduled alert should fire
+var exitAlertScheduleMsg1  = array.new_string()    // Stores the first message (without extension) for the scheduled alert
+var exitAlertScheduleMsg2  = array.new_string()    // Stores the second message (with extension) for the scheduled alert
+
+// ticker extension (if no extension needed it will try without extension first and then with extension)
+extension = ".sml"
+
+// second time frame in minutes
+var string sec_tf = "5"
+
+// PineConnector License input
+pineconnectorLicense = "" 
+
+// PineConnector risk input
+risk = "0.01"
+
+// =============================
+// === FIB DOT SETTINGS
+// =============================
+dot_size_input = input.string("Huge", "Dot Size", options=["Tiny", "Small", "Normal", "Large", "Huge"], group="FIB Dots")
+dot_color_input = input.color(color.black, "Dot Color", group="FIB Dots")
+
+// Helper function to get size
+get_dot_size() =>
+    dot_size_input == "Tiny" ? size.tiny : 
+     dot_size_input == "Small" ? size.small : 
+     dot_size_input == "Normal" ? size.normal : 
+     dot_size_input == "Large" ? size.large : 
+     size.huge
+
+dot_size = get_dot_size()
+dot_color = dot_color_input
+
+// =============================
+// === DUAL TRINITY φ SETTINGS
+// =============================
+trinity_slow_period = input.int(144, "Trinity Slow Period", group="🔶 DUAL TRINITY φ")  // F(12)
+trinity_slow_vf = input.float(0.618, "Trinity Slow VF (φ⁻¹)", step=0.001, group="🔶 DUAL TRINITY φ")
+trinity_fast_period = input.int(13, "Trinity Fast Period", group="🔶 DUAL TRINITY φ")  // F(7)
+trinity_fast_vf = input.float(0.786, "Trinity Fast VF (1/√φ)", step=0.001, group="🔶 DUAL TRINITY φ")
+
+trinity_slow_color = input.color(color.white, "Trinity Slow Color", group="🔶 DUAL TRINITY φ")
+trinity_fast_color = input.color(color.white, "Trinity Fast Color", group="🔶 DUAL TRINITY φ")
+bull_fill_color = input.color(color.new(#00bce5, 70), "Bull Fill", group="🎨 COLORS")
+bear_fill_color = input.color(color.new(#d500f9, 70), "Bear Fill", group="🎨 COLORS")
+
+// =============================
+// === PLOT COLOR SETTINGS
+// =============================
+ma_color = input.color(color.blue, "MA Line Color", group="🎨 PLOT COLORS")
+fib236_color = input.color(color.green, "FIB236 Color", group="🎨 PLOT COLORS")
+fib786_color = input.color(color.red, "FIB786 Color", group="🎨 PLOT COLORS")
+lowestlow_color = input.color(color.green, "LowestLow Color", group="🎨 PLOT COLORS")
+highesthigh_color = input.color(color.red, "HighestHigh Color", group="🎨 PLOT COLORS")
+lowestlow_entry_color = input.color(color.new(#034b06, 0), "LowestLow At Entry (M1)", group="🎨 PLOT COLORS")
+highesthigh_entry_color = input.color(color.new(#500303, 0), "HighestHigh At Entry (M1)", group="🎨 PLOT COLORS")
+m5_lowestlow_long_color = input.color(color.lime, "M5 LowestLow (Long)", group="🎨 PLOT COLORS")
+m5_lowestlow_short_color = input.color(color.red, "M5 LowestLow (Short)", group="🎨 PLOT COLORS")
+m5_lowestlow_neutral_color = input.color(color.gray, "M5 LowestLow (Neutral)", group="🎨 PLOT COLORS")
+m5_highesthigh_long_color = input.color(color.lime, "M5 HighestHigh (Long)", group="🎨 PLOT COLORS")
+m5_highesthigh_short_color = input.color(color.red, "M5 HighestHigh (Short)", group="🎨 PLOT COLORS")
+m5_highesthigh_neutral_color = input.color(color.gray, "M5 HighestHigh (Neutral)", group="🎨 PLOT COLORS")
+ma_fill_bull_color = input.color(color.new(color.green, 70), "MA Fill Bull", group="🎨 PLOT COLORS")
+ma_fill_bear_color = input.color(color.new(color.red, 70), "MA Fill Bear", group="🎨 PLOT COLORS")
+ma_signal_buy_color = input.color(color.green, "MA Signal Buy Label", group="🎨 PLOT COLORS")
+ma_signal_sell_color = input.color(color.red, "MA Signal Sell Label", group="🎨 PLOT COLORS")
+ma_signal_text_color = input.color(color.white, "MA Signal Text Color", group="🎨 PLOT COLORS")
+plot_close_as_dots = input.bool(false, "Plot Close Price as Dots", group="🎨 PLOT COLORS")
+close_dot_color = input.color(color.white, "Close Price Dot Color", group="🎨 PLOT COLORS")
+
+// =============================
+// === FIBONACCI ZONES SETTINGS
+// =============================
+fib_period1 = input.int(610, "Zone Period 1 (F15)", group="📍 FIBONACCI ZONES")  // F(15)
+fib_period2 = input.int(987, "Zone Period 2 (F16)", group="📍 FIBONACCI ZONES")  // F(16)
+
+buy_color1 = input.color(color.new(#00bce5, 85), "Buy Zone 1", group="📍 FIBONACCI ZONES")
+sell_color1 = input.color(color.new(#d500f9, 85), "Sell Zone 1", group="📍 FIBONACCI ZONES")
+buy_color2 = input.color(color.new(#00bce5, 85), "Buy Zone 2", group="📍 FIBONACCI ZONES")
+sell_color2 = input.color(color.new(#d500f9, 85), "Sell Zone 2", group="📍 FIBONACCI ZONES")
+
+// =============================
+// === PIVOT POINTS SETTINGS
+// =============================
+leftLenH = input.int(89, "Pivot High", minval=1, group="🔺 PIVOTS φ")  // F(13)
+rightLenH = leftLenH
+leftLenL = input.int(89, "Pivot Low", minval=1, group="🔺 PIVOTS φ")  // F(13)
+rightLenL = leftLenL
+
+textColorH = input.color(color.white, "Pivot High Text", group="🔺 PIVOTS φ")
+labelColorH = input.color(color.black, "Pivot High Label", group="🔺 PIVOTS φ")
+textColorL = input.color(color.white, "Pivot Low Text", group="🔺 PIVOTS φ")
+labelColorL = input.color(color.black, "Pivot Low Label", group="🔺 PIVOTS φ")
+show_pivot_arrows = input.bool(true, "Show Pivot Arrows", group="🔺 PIVOTS φ")
+pivot_high_arrow_color = input.color(color.red, "Pivot High Arrow Color", group="🔺 PIVOTS φ")
+pivot_low_arrow_color = input.color(color.green, "Pivot Low Arrow Color", group="🔺 PIVOTS φ")
+pivot_arrow_size = input.string("Huge", "Pivot Arrow Size", options=["Tiny", "Small", "Normal", "Large", "Huge"], group="🔺 PIVOTS φ")
+
+// =============================
+// === GLOBAL & PERSISTENT VARS
+// =============================
+var int fibPeriod = 1440    // Always 1440 bars (M1 or M5)
+var int binaryLS = 0
+
+// Arrays for long trades
+var longTradeIds    = array.new_string()  // Order id's for long trades
+var longEntryHH     = array.new_float()   // Recorded HighestHigh at entry (M1)
+var longEntryLL     = array.new_float()   // Recorded LowestLow at entry (M1)
+var longM5LL        = array.new_float()   // Recorded M5 lowest low (if applicable)
+var longSLPTMA      = array.new_bool()    // Flag for each long trade (M1 PT logic)
+
+// Arrays for short trades
+var shortTradeIds   = array.new_string()  // Order id's for short trades
+var shortEntryHH    = array.new_float()   // Recorded HighestHigh at entry (M1)
+var shortEntryLL    = array.new_float()   // Recorded LowestLow at entry (M1)
+var shortM5HH       = array.new_float()   // Recorded M5 highest high (if applicable)
+var shortSLPTMA     = array.new_bool()    // Flag for each short trade (M1 PT logic)
+
+// Counters for unique order id's
+var int longTradeCount  = 0
+var int shortTradeCount = 0
+
+// FIB 0/100 dot tracking
+var label fib0_dot = na
+var label fib100_dot = na
+var float fib0_lowest_price = na
+var float fib100_highest_price = na
+var int fib0_bar = na
+var int fib100_bar = na
+
+// Pivot arrow tracking
+var int last_pivot_high_bar = na
+var int last_pivot_low_bar = na
+
+// Swing high/low tracking (used by ZigZag detection)
+
+// Increment the tick counter on every tick update
+tickCounter += 1
+
+// define a pip based on minitick
+float pip = syminfo.mintick * 10
+
+// =============================
+// === THRIVE EMA FUNCTION (Trinity EMA)
+// =============================
+thriveEMA(src, periods, volumeFactor) =>
+    e1 = ta.ema(src, periods)
+    e2 = ta.ema(e1, periods)
+    e3 = ta.ema(e2, periods)
+    e4 = ta.ema(e3, periods)
+    e5 = ta.ema(e4, periods)
+    e6 = ta.ema(e5, periods)
+    a = volumeFactor
+    c1 = -a * a * a
+    c2 = 3 * a * a + 3 * a * a * a
+    c3 = -6 * a * a - 3 * a - 3 * a * a * a
+    c4 = 1 + 3 * a + a * a * a + 3 * a * a
+    c1 * e6 + c2 * e5 + c3 * e4 + c4 * e3
+
+// =============================
+// === DUAL TRINITY CALCULATIONS
+// =============================
+trinity_slow = thriveEMA(close, trinity_slow_period, trinity_slow_vf)
+trinity_fast = thriveEMA(close, trinity_fast_period, trinity_fast_vf)
+
+// =============================
+// === FIBONACCI ZONES CALCULATIONS
+// =============================
+sell_high1 = ta.highest(high, fib_period1)
+buy_low1 = ta.lowest(low, fib_period1)
+range1 = sell_high1 - buy_low1
+buy_high1 = buy_low1 + 0.236 * range1  // √√φ⁻¹
+sell_low1 = buy_low1 + 0.786 * range1  // 1/√φ
+
+sell_high2 = ta.highest(high, fib_period2)
+buy_low2 = ta.lowest(low, fib_period2)
+range2 = sell_high2 - buy_low2
+buy_high2 = buy_low2 + 0.236 * range2
+sell_low2 = buy_low2 + 0.786 * range2
+
+// =============================
+// === PIVOT POINTS CALCULATIONS
+// =============================
+ph = ta.pivothigh(high, leftLenH, rightLenH)
+pl = ta.pivotlow(low, leftLenL, rightLenL)
+
+// Helper function to get arrow size
+get_pivot_arrow_size() =>
+    pivot_arrow_size == "Tiny" ? size.tiny : 
+     pivot_arrow_size == "Small" ? size.small : 
+     pivot_arrow_size == "Normal" ? size.normal : 
+     pivot_arrow_size == "Large" ? size.large : 
+     size.huge
+
+// Plot big arrows at pivot points
+if show_pivot_arrows and barstate.isconfirmed
+    // Pivot High Arrow - create arrow when new pivot is detected
+    if not na(ph)
+        int pivot_high_bar = bar_index - rightLenH
+        // Only create arrow if this is a new pivot (different bar)
+        if na(last_pivot_high_bar) or pivot_high_bar != last_pivot_high_bar
+            // Create new arrow (keep all pivot arrows visible)
+            label.new(pivot_high_bar, ph, "▼", style=label.style_none, color=color.new(pivot_high_arrow_color, 0), textcolor=pivot_high_arrow_color, size=get_pivot_arrow_size())
+            last_pivot_high_bar := pivot_high_bar
+    
+    // Pivot Low Arrow - create arrow when new pivot is detected
+    if not na(pl)
+        int pivot_low_bar = bar_index - rightLenL
+        // Only create arrow if this is a new pivot (different bar)
+        if na(last_pivot_low_bar) or pivot_low_bar != last_pivot_low_bar
+            // Create new arrow (keep all pivot arrows visible)
+            label.new(pivot_low_bar, pl, "▲", style=label.style_none, color=color.new(pivot_low_arrow_color, 0), textcolor=pivot_low_arrow_color, size=get_pivot_arrow_size())
+            last_pivot_low_bar := pivot_low_bar
+
+// =============================
+// === M1 (Primary) Calculations
+// =============================
+LowestLow   = ta.lowest(low, fibPeriod)
+HighestHigh = ta.highest(high, fibPeriod)
+MA          = thriveEMA(close, fibPeriod, 0.62)
+FIB236      = LowestLow + 0.236 * (HighestHigh - LowestLow)
+FIB786      = LowestLow + 0.786 * (HighestHigh - LowestLow)
+
+// --- Binary flag for M1 ---
+if ta.crossover(close, FIB236)
+    binaryLS := 1
+if ta.crossunder(close, FIB786)
+    binaryLS := -1
+
+// =============================
+// === FIB 0/100 HIT DETECTION & TRACKING
+// =============================
+// Detect when current bar's low equals LowestLow (FIB 0) or high equals HighestHigh (FIB 100)
+// This means the current bar is at or sets the extreme level
+tolerance = syminfo.mintick
+hit_fib0 = math.abs(low - LowestLow) <= tolerance
+hit_fib100 = math.abs(high - HighestHigh) <= tolerance
+
+// Track and update FIB 0 dot
+if hit_fib0 and barstate.isconfirmed
+    // Delete old dot if exists
+    if not na(fib0_dot)
+        label.delete(fib0_dot)
+    // Create new dot at current bar
+    fib0_dot := label.new(bar_index, LowestLow, "⬤⬤", style=label.style_none, color=color.new(dot_color, 0), textcolor=dot_color, size=dot_size)
+
+// Track and update FIB 100 dot
+if hit_fib100 and barstate.isconfirmed
+    // Delete old dot if exists
+    if not na(fib100_dot)
+        label.delete(fib100_dot)
+    // Create new dot at current bar
+    fib100_dot := label.new(bar_index, HighestHigh, "⬤⬤", style=label.style_none, color=color.new(dot_color, 0), textcolor=dot_color, size=dot_size)
+
+// Keep dots visible on last bar if price is still at FIB levels
+if barstate.islast
+    if hit_fib0 and na(fib0_dot)
+        fib0_dot := label.new(bar_index, LowestLow, "⬤⬤", style=label.style_none, color=color.new(dot_color, 0), textcolor=dot_color, size=dot_size)
+    if hit_fib100 and na(fib100_dot)
+        fib100_dot := label.new(bar_index, HighestHigh, "⬤⬤", style=label.style_none, color=color.new(dot_color, 0), textcolor=dot_color, size=dot_size)
+
+// =============================
+// === SEMAFOR ZIGZAG SWING DETECTION
+// =============================
+// ZigZag parameters
+zigzag_depth = 9        // Lookback period (depth) - Small level
+zigzag_deviation = 3.0  // Minimum price move in pips to mark a swing
+zigzag_repaint = false  // Repaint option (false = confirmed only, no repainting)
+
+// Calculate pip value and deviation in price points
+pip_value = syminfo.mintick * 10
+deviation_points = zigzag_deviation * pip_value
+
+// ZigZag state tracking
+var float last_swing_price = na
+var int last_swing_bar = na
+var bool last_swing_was_high = false
+var bool initialized = false
+
+// Initialize with first bar
+if not initialized and barstate.isconfirmed
+    last_swing_price := close
+    last_swing_bar := bar_index
+    initialized := true
+
+// Find pivot points in depth window (confirmed pivots)
+float pivot_high = ta.pivothigh(high, zigzag_depth, zigzag_depth)
+float pivot_low = ta.pivotlow(low, zigzag_depth, zigzag_depth)
+
+// Detect swing high
+bool is_swing_high = false
+float swing_high_price = na
+int swing_high_bar = na
+
+if not na(pivot_high)
+    int pivot_bar = bar_index - zigzag_depth
+    // Check if this swing meets deviation requirement
+    if na(last_swing_price) or not last_swing_was_high or (pivot_high - last_swing_price >= deviation_points)
+        is_swing_high := true
+        swing_high_price := pivot_high
+        swing_high_bar := pivot_bar
+        if zigzag_repaint or barstate.isconfirmed
+            last_swing_price := pivot_high
+            last_swing_bar := pivot_bar
+            last_swing_was_high := true
+
+// Detect swing low
+bool is_swing_low = false
+float swing_low_price = na
+int swing_low_bar = na
+
+if not na(pivot_low)
+    int pivot_bar = bar_index - zigzag_depth
+    // Check if this swing meets deviation requirement
+    if na(last_swing_price) or last_swing_was_high or (last_swing_price - pivot_low >= deviation_points)
+        is_swing_low := true
+        swing_low_price := pivot_low
+        swing_low_bar := pivot_bar
+        if zigzag_repaint or barstate.isconfirmed
+            last_swing_price := pivot_low
+            last_swing_bar := pivot_bar
+            last_swing_was_high := false
+
+// Final swing detection (only confirmed if repaint is off)
+bool swing_high = is_swing_high and (zigzag_repaint or barstate.isconfirmed)
+bool swing_low = is_swing_low and (zigzag_repaint or barstate.isconfirmed)
+float swing_high_value = swing_high ? swing_high_price : na
+float swing_low_value = swing_low ? swing_low_price : na
+
+// ===== M1 ENTRY CONDITIONS =====
+// (The built–in check on strategy.position_size has been removed to allow multiple entries.)
+longEntry_condition  = ta.crossover(close, MA) and binaryLS == 1 and barstate.isconfirmed
+shortEntry_condition = ta.crossunder(close, MA) and binaryLS == -1 and barstate.isconfirmed
+
+// ===== MA CROSSOVER SIGNALS =====
+// Clean up old MA signal labels and create new ones
+var label ma_signal_label = na
+if barstate.islast
+    if not na(ma_signal_label)
+        label.delete(ma_signal_label)
+        ma_signal_label := na
+    
+    // UPTREND signal as long as price is above MA
+    if close > MA
+        ma_signal_label := label.new(bar_index, low, "UPTREND", style=label.style_label_up, color=ma_signal_buy_color, textcolor=ma_signal_text_color, size=size.normal)
+    
+    // DOWNTREND signal as long as price is below MA
+    if close < MA
+        ma_signal_label := label.new(bar_index, high, "DOWNTREND", style=label.style_label_down, color=ma_signal_sell_color, textcolor=ma_signal_text_color, size=size.normal)
+
+// Send alerts on confirmed bars
+if close > MA and barstate.isconfirmed
+    alert(pineconnectorLicense + ", buy, " + syminfo.ticker + ", risk=" + risk)
+    alert(pineconnectorLicense + ", buy, " + syminfo.ticker + extension + ", risk=" + risk)
+
+if close < MA and barstate.isconfirmed
+    alert(pineconnectorLicense + ", sell, " + syminfo.ticker + ", risk=" + risk)
+    alert(pineconnectorLicense + ", sell, " + syminfo.ticker + extension + ", risk=" + risk)
+
+// =============================
+// === M5 Calculations (for SL adjustments and extra entry conditions)
+// =============================
+m5_close        = request.security(syminfo.tickerid, sec_tf, close, lookahead=barmerge.lookahead_on)
+m5_low          = request.security(syminfo.tickerid, sec_tf, low, lookahead=barmerge.lookahead_on)
+m5_high         = request.security(syminfo.tickerid, sec_tf, high, lookahead=barmerge.lookahead_on)
+m5_LowestLow    = request.security(syminfo.tickerid, sec_tf, ta.lowest(low, fibPeriod), lookahead=barmerge.lookahead_on)
+m5_HighestHigh  = request.security(syminfo.tickerid, sec_tf, ta.highest(high, fibPeriod), lookahead=barmerge.lookahead_on)
+m5_MA           = request.security(syminfo.tickerid, sec_tf, thriveEMA(close, fibPeriod, 0.62), lookahead=barmerge.lookahead_on)
+m5_FIB236       = m5_LowestLow + 0.236 * (m5_HighestHigh - m5_LowestLow)
+m5_FIB786       = m5_LowestLow + 0.786 * (m5_HighestHigh - m5_LowestLow)
+
+// --- M5 "entry" conditions ---
+// For longs, the extra condition is:
+m5_longEntry_condition  = (m5_close > m5_MA) and (m5_close > m5_FIB236)
+// For shorts, the extra condition is:
+m5_shortEntry_condition = (m5_close < m5_MA) and (m5_close < m5_FIB786)
+
+// =============================
+// === EXIT EXECUTION (Process exits BEFORE new entries)
+// =============================
+
+// === EXIT EXECUTION for LONG trades ===
+if array.size(longTradeIds) > 0
+    int i = array.size(longTradeIds) - 1
+    while i >= 0
+        float entryHH = array.get(longEntryHH, i)
+        float entryLL = array.get(longEntryLL, i)
+        float m5LL    = array.get(longM5LL, i)
+        bool slptma   = array.get(longSLPTMA, i)
+        
+        // For a long trade, if the current bar's high touches the profit target then exit.
+        // The target is the recorded entry high if SLPTMA is true; otherwise, use the current HighestHigh.
+        bool longExit_condition_PT = slptma ? (high >= entryHH) : (high >= HighestHigh)
+        // For stop loss, use the M5 level if available; otherwise, the M1 entry low.
+        float long_SL_level = not na(m5LL) ? m5LL : entryLL
+        bool longExit_condition_SL = low <= long_SL_level
+        
+        if longExit_condition_PT or longExit_condition_SL
+            string lid = array.get(longTradeIds, i)
+            strategy.close(lid)
+            // Instead of a one-time alert, send the exit signal three times:
+            string longAlertMsg1 = pineconnectorLicense + ", closelong, " + syminfo.ticker
+            string longAlertMsg2 = pineconnectorLicense + ", closelong, " + syminfo.ticker + extension
+            // Immediate (first) alert:
+            alert(longAlertMsg1)
+            alert(longAlertMsg2)
+            // Schedule second alert after 10 ticks:
+            array.push(exitAlertScheduleTicks, tickCounter + 10)
+            array.push(exitAlertScheduleMsg1, longAlertMsg1)
+            array.push(exitAlertScheduleMsg2, longAlertMsg2)
+            // Schedule third alert after another 10 ticks (i.e. tickCounter + 20):
+            array.push(exitAlertScheduleTicks, tickCounter + 20)
+            array.push(exitAlertScheduleMsg1, longAlertMsg1)
+            array.push(exitAlertScheduleMsg2, longAlertMsg2)
+            
+            array.remove(longTradeIds, i)
+            array.remove(longEntryHH, i)
+            array.remove(longEntryLL, i)
+            array.remove(longM5LL, i)
+            array.remove(longSLPTMA, i)
+        i := i - 1
+
+// === EXIT EXECUTION for SHORT trades ===
+if array.size(shortTradeIds) > 0
+    int i = array.size(shortTradeIds) - 1
+    while i >= 0
+        float entryHH = array.get(shortEntryHH, i)
+        float entryLL = array.get(shortEntryLL, i)
+        float m5HH    = array.get(shortM5HH, i)
+        bool slptma   = array.get(shortSLPTMA, i)
+        
+        // For a short trade, if the current bar's low touches the profit target then exit.
+        // The target is the recorded entry low if SLPTMA is true; otherwise, use the current LowestLow.
+        bool shortExit_condition_PT = slptma ? (low <= entryLL) : (low <= LowestLow)
+        // For stop loss, use the M5 level if available; otherwise, the M1 entry high.
+        float short_SL_level = not na(m5HH) ? m5HH : entryHH
+        bool shortExit_condition_SL = high >= short_SL_level
+                
+        if shortExit_condition_PT or shortExit_condition_SL
+            string sid = array.get(shortTradeIds, i)
+            strategy.close(sid)
+            string shortAlertMsg1 = pineconnectorLicense + ", closeshort, " + syminfo.ticker
+            string shortAlertMsg2 = pineconnectorLicense + ", closeshort, " + syminfo.ticker + extension
+            // Immediate (first) alert:
+            alert(shortAlertMsg1)
+            alert(shortAlertMsg2)
+            // Schedule second alert after 10 ticks:
+            array.push(exitAlertScheduleTicks, tickCounter + 10)
+            array.push(exitAlertScheduleMsg1, shortAlertMsg1)
+            array.push(exitAlertScheduleMsg2, shortAlertMsg2)
+            // Schedule third alert after another 10 ticks (i.e. tickCounter + 20):
+            array.push(exitAlertScheduleTicks, tickCounter + 20)
+            array.push(exitAlertScheduleMsg1, shortAlertMsg1)
+            array.push(exitAlertScheduleMsg2, shortAlertMsg2)
+            
+            array.remove(shortTradeIds, i)
+            array.remove(shortEntryHH, i)
+            array.remove(shortEntryLL, i)
+            array.remove(shortM5HH, i)
+            array.remove(shortSLPTMA, i)
+        i := i - 1
+
+// =============================
+// === ENTRY EXECUTION (Multi–positions)
+// =============================
+
+// A new long trade is taken only when no short trades are open AND:
+//   - if m5_longEntry_condition is true then up to 3 long positions are allowed
+//   - if m5_longEntry_condition is false then only one long position is allowed
+canEnterLong = (array.size(shortTradeIds) == 0) and ( (m5_longEntry_condition and (array.size(longTradeIds) < 3)) or ((not m5_longEntry_condition) and (array.size(longTradeIds) == 0)) )
+if longEntry_condition and canEnterLong
+    longTradeCount += 1
+    string longId = "long_" + str.tostring(longTradeCount)
+    strategy.entry(longId, strategy.long)
+    array.push(longTradeIds, longId)
+    array.push(longEntryHH, HighestHigh)
+    array.push(longEntryLL, LowestLow)
+    if m5_longEntry_condition
+        array.push(longM5LL, m5_LowestLow)
+    else
+        array.push(longM5LL, na)
+    array.push(longSLPTMA, (HighestHigh - MA) < (MA - LowestLow))
+    binaryLS := 0
+
+    //alert(pineconnectorLicense + ", buy, " + syminfo.ticker + ", sl=" + SL + ", risk=" + risk)
+    //alert(pineconnectorLicense + ", buy, " + syminfo.ticker + extension + ", sl=" + SL + ", risk=" + risk)
+
+    // Compute stop-loss level for the alert:
+    float longSL_level = m5_longEntry_condition ? m5_LowestLow : LowestLow
+    float longSL = longSL_level - 10 * pip
+
+    // Send alert with the new SL value:
+    alert(pineconnectorLicense + ", buy, " + syminfo.ticker + ", sl=" + str.tostring(longSL) + ", risk=" + risk)
+    alert(pineconnectorLicense + ", buy, " + syminfo.ticker + extension + ", sl=" + str.tostring(longSL) + ", risk=" + risk)
+
+// A new short trade is taken only when no long trades are open AND:
+//   - if m5_shortEntry_condition is true then up to 3 short positions are allowed
+//   - if m5_shortEntry_condition is false then only one short position is allowed
+canEnterShort = (array.size(longTradeIds) == 0) and ( (m5_shortEntry_condition and (array.size(shortTradeIds) < 3)) or ((not m5_shortEntry_condition) and (array.size(shortTradeIds) == 0)) )
+if shortEntry_condition and canEnterShort
+    shortTradeCount += 1
+    string shortId = "short_" + str.tostring(shortTradeCount)
+    strategy.entry(shortId, strategy.short)
+    array.push(shortTradeIds, shortId)
+    array.push(shortEntryHH, HighestHigh)
+    array.push(shortEntryLL, LowestLow)
+    if m5_shortEntry_condition
+        array.push(shortM5HH, m5_HighestHigh)
+    else
+        array.push(shortM5HH, na)
+    array.push(shortSLPTMA, (MA - LowestLow) < (HighestHigh - MA))
+    binaryLS := 0
+
+    //alert(pineconnectorLicense + ", sell, " + syminfo.ticker + ", sl=" + SL + ", risk=" + risk)
+    //alert(pineconnectorLicense + ", sell, " + syminfo.ticker + extension + ", sl=" + SL + ", risk=" + risk)
+
+    // Compute stop-loss level for the alert:
+    float shortSL_level = m5_shortEntry_condition ? m5_HighestHigh : HighestHigh
+    float shortSL = shortSL_level + 10 * pip
+
+    // Send alert with the new SL value:
+    alert(pineconnectorLicense + ", sell, " + syminfo.ticker + ", sl=" + str.tostring(shortSL) + ", risk=" + risk)
+    alert(pineconnectorLicense + ", sell, " + syminfo.ticker + extension + ", sl=" + str.tostring(shortSL) + ", risk=" + risk)
+
+// =============================
+// === PLOT INDICATORS (M1 and M5) - AS LARGE DOTS
+// =============================
+plot(MA, color=ma_color, title="MA", style=plot.style_circles, linewidth=3)
+
+plot(FIB236, color=fib236_color, title="FIB236", style=plot.style_circles, linewidth=3)
+plot(FIB786, color=fib786_color, title="FIB786", style=plot.style_circles, linewidth=3)
+plot(LowestLow, color=lowestlow_color, title="LowestLow", style=plot.style_circles, linewidth=3)
+plot(HighestHigh, color=highesthigh_color, title="HighestHigh", style=plot.style_circles, linewidth=3)
+plot(LowestLow, color=lowestlow_entry_color, title="LowestLowAtEntry (M1)", style=plot.style_circles, linewidth=3)
+plot(HighestHigh, color=highesthigh_entry_color, title="HighestHighAtEntry (M1)", style=plot.style_circles, linewidth=3)
+plot(m5_LowestLow, color = m5_longEntry_condition ? m5_lowestlow_long_color : m5_shortEntry_condition ? m5_lowestlow_short_color : m5_lowestlow_neutral_color, title="LowestLowAtEntry (M5)", style=plot.style_circles, linewidth=3)
+plot(m5_HighestHigh, color = m5_longEntry_condition ? m5_highesthigh_long_color : m5_shortEntry_condition ? m5_highesthigh_short_color : m5_highesthigh_neutral_color, title="HighestHighAtEntry (M5)", style=plot.style_circles, linewidth=3)
+
+// =============================
+// === PLOT DUAL TRINITY LINES - AS LARGE DOTS
+// =============================
+plot(trinity_slow, "Trinity Slow", trinity_slow_color, style=plot.style_circles, linewidth=3)
+plot(trinity_fast, "Trinity Fast", trinity_fast_color, style=plot.style_circles, linewidth=3)
+
+// =============================
+// === PLOT FIBONACCI ZONES (BOXES)
+// =============================
+if barstate.islast
+    for b in box.all
+        box.delete(b)
+    
+    box.new(bar_index - fib_period1, buy_high1, bar_index, buy_low1, border_width=0, bgcolor=buy_color1)
+    box.new(bar_index - fib_period1, sell_high1, bar_index, sell_low1, border_width=0, bgcolor=sell_color1)
+    box.new(bar_index - fib_period2, buy_high2, bar_index, buy_low2, border_width=0, bgcolor=buy_color2)
+    box.new(bar_index - fib_period2, sell_high2, bar_index, sell_low2, border_width=0, bgcolor=sell_color2)
+
+// =============================
+// === PLOT FIB 0/100 HIT DOTS
+// =============================
+// Dots are created and updated in the detection section above
+
+// =============================
+// === PROCESS SCHEDULED EXIT ALERTS
+// =============================
+// On every tick check if any scheduled exit alerts are due and send them.
+var int idx = array.size(exitAlertScheduleTicks) - 1
+while idx >= 0
+    if tickCounter >= array.get(exitAlertScheduleTicks, idx)
+        alert(array.get(exitAlertScheduleMsg1, idx))
+        alert(array.get(exitAlertScheduleMsg2, idx))
+        array.remove(exitAlertScheduleTicks, idx)
+        array.remove(exitAlertScheduleMsg1, idx)
+        array.remove(exitAlertScheduleMsg2, idx)
+    idx := idx - 1 
+                           
