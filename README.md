@@ -1,6 +1,28 @@
-# MAESTRO Trading Indicator - Python Version
+# MAESTRO Predictive Analytics
 
-This is a Python conversion of the MAESTRO Pine Script indicator for TradingView.
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![GitHub](https://img.shields.io/github/stars/invecta/predictive-analytics?style=social)](https://github.com/invecta/predictive-analytics)
+
+**Comprehensive Trading Indicator and Market Analysis Framework**
+
+A professional Python implementation of the MAESTRO trading indicator with advanced technical analysis capabilities, macroeconomic integration, and predictive market outlook generation.
+
+## 🎯 What This Project Does
+
+This project provides:
+- **MAESTRO Trading Indicator**: Python conversion of the Pine Script indicator with Fibonacci retracements, ZigZag analysis, and multi-timeframe support
+- **Technical Analysis Framework**: Comprehensive trend analysis, momentum indicators, and support/resistance identification
+- **Market Outlook System**: Short, medium, and long-term market predictions combining technical and fundamental analysis
+- **Risk Assessment**: Automated risk evaluation and strategy recommendations
+
+## 🚀 Quick Start
+
+See [QUICKSTART.md](QUICKSTART.md) for a 5-minute getting started guide.
+
+## 📋 Overview
+
+This is a Python conversion of the MAESTRO Pine Script indicator for TradingView, enhanced with additional predictive analytics capabilities.
 
 ## Features
 
@@ -114,10 +136,104 @@ The `calculate_signals()` method returns a DataFrame with the following columns:
 - ZigZag calculation uses conservative lookback limits for safety
 - All calculations are vectorized using pandas/numpy for performance
 
-## Differences from Pine Script Version
+## 📚 Additional Features
+
+### Market Outlook Analysis
+
+Generate comprehensive market outlooks combining technical and fundamental analysis:
+
+```python
+from market_outlook_analysis import future_stock_market_outlook
+
+# Generate outlook report
+outlook = future_stock_market_outlook(
+    price_data=df,
+    macro_environment={
+        'inflation_rate': 2.5,
+        'interest_rates': 2.0,
+        'gdp_growth': 2.8,
+        'market_sentiment': 'NEUTRAL'
+    }
+)
+print(outlook)
+```
+
+### Technical Analysis Framework
+
+Use the comprehensive technical analysis framework:
+
+```python
+from technical_analysis_framework import TechnicalMarketAnalysis
+
+analyzer = TechnicalMarketAnalysis(maestro_indicator=maestro)
+assessment = analyzer.comprehensive_market_assessment(df, macro_data)
+report = analyzer.generate_market_outlook_report(df, macro_data)
+```
+
+## 📖 Documentation
+
+- **[QUICKSTART.md](QUICKSTART.md)**: Quick start guide
+- **[FUTURE_MARKET_OUTLOOK_FRAMEWORK.md](FUTURE_MARKET_OUTLOOK_FRAMEWORK.md)**: Comprehensive analysis framework documentation
+- **[example_usage.py](example_usage.py)**: Complete usage examples
+
+## 🛠️ Installation Options
+
+### Option 1: Using pip (Recommended)
+
+```bash
+pip install -r requirements.txt
+```
+
+### Option 2: Install as Package
+
+```bash
+pip install -e .
+```
+
+## 📊 Example Output
+
+The framework generates comprehensive analysis including:
+
+- **Short-term outlook** (1-5 days): Direction, key levels, reasoning
+- **Medium-term outlook** (1-3 months): Trend strength, confidence level
+- **Long-term outlook** (3-12 months): Macroeconomic factors, strategic view
+- **Risk assessment**: Identified risks and mitigation strategies
+- **Strategy recommendations**: Trading approach based on analysis
+
+## 🔧 Differences from Pine Script Version
 
 - Visualization uses matplotlib instead of TradingView's built-in plotting
 - Multi-timeframe data is handled via pandas resampling
+- Enhanced with macroeconomic analysis capabilities
+- Additional risk assessment and strategy recommendation features
 - Some Pine Script-specific features (like labels) are converted to DataFrame columns
 - Alert functionality would need to be implemented separately based on your needs
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## 📝 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## ⚠️ Disclaimer
+
+This software is for educational and research purposes only. It is not financial advice. Always conduct your own research and consult with qualified financial professionals before making investment decisions. Past performance does not guarantee future results.
+
+## 👤 Author
+
+**Hani Hindaoui**
+- Email: hindaouihani@gmail.com
+- GitHub: [@invecta](https://github.com/invecta)
+
+## 🙏 Acknowledgments
+
+- Original MAESTRO Pine Script indicator
+- TradingView community
+- Python data science community
+
+---
+
+⭐ If you find this project useful, please consider giving it a star!
 
